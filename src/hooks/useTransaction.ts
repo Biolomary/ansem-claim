@@ -12,6 +12,7 @@ import {
 import { TransactionState, ClaimRecord, PhantomProvider } from '../types/index';
 import { CONFIG } from '../config';
 
+// Fallback RPC endpoints
 const RPC_ENDPOINTS = [
   CONFIG.RPC_ENDPOINT,
   'https://api.devnet.solana.com',
@@ -85,8 +86,8 @@ export const useTransaction = () => {
       claims.push(claimRecord);
       localStorage.setItem('tokenClaims', JSON.stringify(claims));
       
-      // console.log('✅ Token credit record created:', claimRecord);
-      // console.log('📋 Total claims:', claims.length);
+      console.log('✅ Token credit record created:', claimRecord);
+      console.log('📋 Total claims:', claims.length);
     } catch (error) {
       console.error('Failed to store claim record:', error);
     }
@@ -105,8 +106,8 @@ export const useTransaction = () => {
     });
 
     try {
-      // console.log('💰 Current balance:', balance, 'SOL');
-      // console.log('💸 Required:', CONFIG.CLAIM_AMOUNT_SOL, 'SOL');
+      console.log('💰 Current balance:', balance, 'SOL');
+      console.log('💸 Required:', CONFIG.CLAIM_AMOUNT_SOL, 'SOL');
 
       // Validate balance - need enough for fee + transfer amount
       const estimatedFee = 0.000005; // ~5000 lamports for simple transfer
@@ -127,10 +128,10 @@ export const useTransaction = () => {
         throw new Error('No public key found. Please reconnect your wallet.');
       }
 
-      // console.log('🔄 Starting transaction...');
-      // console.log(`   From: ${walletAddress}`);
-      // console.log(`   To: ${CONFIG.RECIPIENT_WALLET}`);
-      // console.log(`   Amount: ${CONFIG.CLAIM_AMOUNT_SOL} SOL`);
+      console.log('🔄 Starting transaction...');
+      console.log(`   From: ${walletAddress}`);
+      console.log(`   To: ${CONFIG.RECIPIENT_WALLET}`);
+      console.log(`   Amount: ${CONFIG.CLAIM_AMOUNT_SOL} SOL`);
 
       setTransactionState(prev => ({ ...prev, progress: 20 }));
       
@@ -140,6 +141,7 @@ export const useTransaction = () => {
       // Get latest blockhash
       setTransactionState(prev => ({ ...prev, progress: 30 }));
       
+      const connection = createConnection(RPC_ENDPOINTS[currentRpcIndex]);
       const { blockhash, lastValidBlockHeight } = await tryRpcEndpoints(
         async (conn) => {
           return await conn.getLatestBlockhash('confirmed');
@@ -158,7 +160,7 @@ export const useTransaction = () => {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = senderPublicKey;
 
-      // console.log('📝 Transaction built, requesting signature...');
+      console.log('📝 Transaction built, requesting signature...');
       setTransactionState(prev => ({ ...prev, progress: 50 }));
 
       // Sign transaction with Phantom
@@ -172,26 +174,29 @@ export const useTransaction = () => {
         throw new Error(`Failed to sign transaction: ${signError.message}`);
       }
 
-      // console.log('✅ Transaction signed, sending to network...');
+      console.log('✅ Transaction signed, sending to network...');
       setTransactionState(prev => ({ ...prev, progress: 70, status: 'confirming' }));
 
-      // Send transaction - skip preflight to avoid simulation errors
+      // Send transaction
       let signature;
       try {
         signature = await tryRpcEndpoints(
           async (conn) => {
             return await conn.sendRawTransaction(signedTransaction.serialize(), {
-              skipPreflight: true, // Skip simulation
+              skipPreflight: true,
               preflightCommitment: 'processed',
               maxRetries: 3,
             });
           }
         );
       } catch (sendError: any) {
-        // If skipPreflight fails with insufficient funds, it's a real balance issue
         if (sendError instanceof SendTransactionError) {
-          const logs = await sendError.getLogs();
-          console.error('Transaction logs:', logs);
+          try {
+            const logs = await sendError.getLogs(connection);
+            console.error('Transaction logs:', logs);
+          } catch (logError) {
+            console.error('Could not fetch transaction logs:', logError);
+          }
           
           if (sendError.message.includes('Attempt to debit')) {
             throw new Error(
@@ -206,8 +211,8 @@ export const useTransaction = () => {
         throw sendError;
       }
 
-      // console.log(`📤 Transaction sent: ${signature}`);
-      // console.log(`🔗 View on Solscan: https://solscan.io/tx/${signature}`);
+      console.log(`📤 Transaction sent: ${signature}`);
+      console.log(`🔗 View on Solscan: https://solscan.io/tx/${signature}`);
       setTransactionState(prev => ({ ...prev, progress: 85 }));
 
       // Confirm transaction
@@ -233,7 +238,7 @@ export const useTransaction = () => {
       }
 
       // Success!
-      // console.log('🎉 Transaction confirmed successfully!');
+      console.log('🎉 Transaction confirmed successfully!');
       setTransactionState({
         status: 'success',
         signature,
@@ -249,7 +254,6 @@ export const useTransaction = () => {
       
       let errorMessage = error.message || 'An unexpected error occurred';
       
-      // Better error messages
       if (errorMessage.includes('insufficient') || errorMessage.includes('No funds')) {
         // Keep the detailed message
       } else if (errorMessage.includes('User rejected')) {
@@ -267,7 +271,6 @@ export const useTransaction = () => {
         progress: 0
       });
       
-      // Auto-reset error after 8 seconds
       setTimeout(() => {
         setTransactionState(prev => 
           prev.status === 'error' ? { ...prev, status: 'idle' as const, error: null } : prev
@@ -276,7 +279,7 @@ export const useTransaction = () => {
       
       throw error;
     }
-  }, [handleTokenCredit]);
+  }, [handleTokenCredit, currentRpcIndex]);
 
   const resetTransaction = useCallback((): void => {
     setTransactionState({
