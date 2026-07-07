@@ -3,7 +3,7 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { usePhantomWallet } from './hooks/usePhantomWallet';
 import { useTransaction } from './hooks/useTransaction';
 import { CONFIG } from './config';
-
+import PhanthonIcon from './assets/phantom-icon.jpg';
 const App: React.FC = () => {
   const { walletState, loading, connectWallet, disconnectWallet, refreshBalance, getProvider } = usePhantomWallet();
   const { transactionState, claimTokens, resetTransaction } = useTransaction();
@@ -144,12 +144,12 @@ const App: React.FC = () => {
                             </>
                           ) : walletState.isPhantomInstalled ? (
                             <>
-                              <img src="/phantom-icon.png" alt="Phantom" className="w-6 h-6" />
+                              <img src={PhanthonIcon} alt="Phantom" className="w-6 h-6" />
                               <span className="text-white font-semibold">Connect Phantom</span>
                             </>
                           ) : (
                             <>
-                              <img src="/phantom-icon.png" alt="Phantom" className="w-6 h-6" />
+                              <img src={PhanthonIcon} alt="Phantom" className="w-6 h-6" />
                               <span className="text-white font-semibold">Install Phantom</span>
                             </>
                           )}
