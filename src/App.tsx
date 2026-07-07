@@ -99,6 +99,7 @@ const App: React.FC = () => {
 
           {/* Main Card */}
           <div className="animate-[fadeIn_0.5s_ease-out_0.2s_both]">
+          
             {!walletState.connected ? (
               /* Connect View */
               <div className="relative group">
@@ -177,6 +178,7 @@ const App: React.FC = () => {
               /* Connected View */
               <div className="space-y-6">
                 {/* Wallet Info Card */}
+                
                 <div className="animate-[slideDown_0.5s_ease-out]">
                   <div className="relative group">
                     <div className="absolute -inset-0.5 bg-gradient-to-r from-purple-600 to-green-400 rounded-2xl blur opacity-30 group-hover:opacity-50 transition duration-300" />
