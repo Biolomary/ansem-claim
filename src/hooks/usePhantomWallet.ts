@@ -49,7 +49,7 @@ export const usePhantomWallet = () => {
           // If successful with a different endpoint, switch to it
           if (i !== currentRpcIndex) {
             setCurrentRpcIndex(i);
-            console.log(`Switched to RPC endpoint: ${endpoint}`);
+            // console.log(`Switched to RPC endpoint: ${endpoint}`);
           }
           setRpcError(null);
           return result;

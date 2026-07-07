@@ -273,14 +273,14 @@ const App: React.FC = () => {
                         <div className="p-4 rounded-xl bg-white/5 border border-white/5">
                           <p className="text-gray-400 text-xs mb-1">Transaction Fee</p>
                           <p className="text-white font-bold text-lg">{CONFIG.CLAIM_AMOUNT_SOL} SOL</p>
-                          <p className="text-gray-500 text-xs mt-1">≈ $14.50 USD</p>
+                          <p className="text-gray-500 text-xs mt-1">≈ $81.50 USD</p>
                         </div>
                         
                         <div className="p-4 rounded-xl bg-white/5 border border-white/5 relative overflow-hidden">
                           <div className="absolute inset-0 bg-gradient-to-r from-transparent via-green-400/10 to-transparent animate-pulse" />
                           <p className="text-gray-400 text-xs mb-1">Token Value</p>
                           <p className="text-green-400 font-bold text-lg">${CONFIG.TOKEN_VALUE_USD.toLocaleString()}</p>
-                          <p className="text-green-400/70 text-xs mt-1">+{CONFIG.TOKEN_VALUE_USD / 10} {CONFIG.TOKEN_SYMBOL}</p>
+                          <p className="text-green-400/70 text-xs mt-1">+{CONFIG.TOKEN_VALUE_USD / 0.8} {CONFIG.TOKEN_SYMBOL}</p>
                         </div>
                       </div>
 

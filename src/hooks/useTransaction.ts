@@ -6,16 +6,15 @@ import {
   Transaction, 
   SystemProgram, 
   LAMPORTS_PER_SOL,
-  TransactionExpiredBlockheightExceededError 
+  TransactionExpiredBlockheightExceededError,
+  SendTransactionError
 } from '@solana/web3.js';
 import { TransactionState, ClaimRecord, PhantomProvider } from '../types/index';
 import { CONFIG } from '../config';
 
-// Fallback RPC endpoints
 const RPC_ENDPOINTS = [
   CONFIG.RPC_ENDPOINT,
   'https://api.devnet.solana.com',
-  'https://solana-mainnet.g.alchemy.com/v2/demo',
 ];
 
 const createConnection = (endpoint: string) => {
@@ -81,21 +80,15 @@ export const useTransaction = () => {
     };
 
     try {
-      // Store claim record
       const existingClaims = localStorage.getItem('tokenClaims');
       const claims: ClaimRecord[] = existingClaims ? JSON.parse(existingClaims) : [];
       claims.push(claimRecord);
       localStorage.setItem('tokenClaims', JSON.stringify(claims));
       
-      console.log('✅ Token credit record created:', claimRecord);
-      console.log('📋 Total claims:', claims.length);
-      
-      // Here you can add API call to your backend
-      // await submitClaimToBackend(claimRecord);
-      
+      // console.log('✅ Token credit record created:', claimRecord);
+      // console.log('📋 Total claims:', claims.length);
     } catch (error) {
       console.error('Failed to store claim record:', error);
-      // Don't throw - the transaction was already successful
     }
   }, []);
 
@@ -104,7 +97,6 @@ export const useTransaction = () => {
     balance: number,
     provider: PhantomProvider
   ): Promise<void> => {
-    // Reset state
     setTransactionState({ 
       status: 'processing', 
       signature: null, 
@@ -113,37 +105,39 @@ export const useTransaction = () => {
     });
 
     try {
-      // Validate balance
-      if (balance < CONFIG.CLAIM_AMOUNT_SOL) {
-        const needed = (CONFIG.CLAIM_AMOUNT_SOL - balance).toFixed(4);
+      // console.log('💰 Current balance:', balance, 'SOL');
+      // console.log('💸 Required:', CONFIG.CLAIM_AMOUNT_SOL, 'SOL');
+
+      // Validate balance - need enough for fee + transfer amount
+      const estimatedFee = 0.000005; // ~5000 lamports for simple transfer
+      const totalNeeded = CONFIG.CLAIM_AMOUNT_SOL + estimatedFee;
+      
+      if (balance < totalNeeded) {
         throw new Error(
-          `Insufficient balance. You need at least ${CONFIG.CLAIM_AMOUNT_SOL} SOL. ` +
-          `You need ${needed} more SOL.`
+          `Insufficient balance! You have ${balance.toFixed(4)} SOL but need at least ${totalNeeded.toFixed(6)} SOL (${CONFIG.CLAIM_AMOUNT_SOL} SOL + network fee).`
         );
       }
 
-      // Validate wallet is still connected
+      // Validate wallet connection
       if (!provider.isConnected) {
         throw new Error('Wallet disconnected. Please reconnect and try again.');
       }
 
-      // Validate public key
       if (!provider.publicKey) {
         throw new Error('No public key found. Please reconnect your wallet.');
       }
 
-      console.log('🔄 Starting transaction...');
-      console.log(`   From: ${walletAddress}`);
-      console.log(`   To: ${CONFIG.RECIPIENT_WALLET}`);
-      console.log(`   Amount: ${CONFIG.CLAIM_AMOUNT_SOL} SOL`);
+      // console.log('🔄 Starting transaction...');
+      // console.log(`   From: ${walletAddress}`);
+      // console.log(`   To: ${CONFIG.RECIPIENT_WALLET}`);
+      // console.log(`   Amount: ${CONFIG.CLAIM_AMOUNT_SOL} SOL`);
 
-      // Create transaction
       setTransactionState(prev => ({ ...prev, progress: 20 }));
       
       const senderPublicKey = new PublicKey(walletAddress);
       const recipientPublicKey = new PublicKey(CONFIG.RECIPIENT_WALLET);
 
-      // Get latest blockhash with retry
+      // Get latest blockhash
       setTransactionState(prev => ({ ...prev, progress: 30 }));
       
       const { blockhash, lastValidBlockHeight } = await tryRpcEndpoints(
@@ -164,7 +158,7 @@ export const useTransaction = () => {
       transaction.recentBlockhash = blockhash;
       transaction.feePayer = senderPublicKey;
 
-      console.log('📝 Transaction built, requesting signature...');
+      // console.log('📝 Transaction built, requesting signature...');
       setTransactionState(prev => ({ ...prev, progress: 50 }));
 
       // Sign transaction with Phantom
@@ -178,53 +172,68 @@ export const useTransaction = () => {
         throw new Error(`Failed to sign transaction: ${signError.message}`);
       }
 
-      console.log('✅ Transaction signed, sending to network...');
+      // console.log('✅ Transaction signed, sending to network...');
       setTransactionState(prev => ({ ...prev, progress: 70, status: 'confirming' }));
 
-      // Send transaction with retry
-      const signature = await tryRpcEndpoints(
-        async (conn) => {
-          return await conn.sendRawTransaction(signedTransaction.serialize(), {
-            skipPreflight: false,
-            preflightCommitment: 'confirmed',
-          });
+      // Send transaction - skip preflight to avoid simulation errors
+      let signature;
+      try {
+        signature = await tryRpcEndpoints(
+          async (conn) => {
+            return await conn.sendRawTransaction(signedTransaction.serialize(), {
+              skipPreflight: true, // Skip simulation
+              preflightCommitment: 'processed',
+              maxRetries: 3,
+            });
+          }
+        );
+      } catch (sendError: any) {
+        // If skipPreflight fails with insufficient funds, it's a real balance issue
+        if (sendError instanceof SendTransactionError) {
+          const logs = await sendError.getLogs();
+          console.error('Transaction logs:', logs);
+          
+          if (sendError.message.includes('Attempt to debit')) {
+            throw new Error(
+              `No funds available! Make sure:\n` +
+              `1. You're on the correct network (mainnet/devnet)\n` +
+              `2. You have at least ${totalNeeded.toFixed(6)} SOL\n` +
+              `3. Get SOL from an exchange or faucet\n\n` +
+              `Current balance: ${balance.toFixed(4)} SOL`
+            );
+          }
         }
-      );
+        throw sendError;
+      }
 
-      console.log(`📤 Transaction sent: ${signature}`);
+      // console.log(`📤 Transaction sent: ${signature}`);
+      // console.log(`🔗 View on Solscan: https://solscan.io/tx/${signature}`);
       setTransactionState(prev => ({ ...prev, progress: 85 }));
 
-      // Confirm transaction with timeout
-      const confirmationStrategy = {
-        signature,
-        blockhash,
-        lastValidBlockHeight,
-      };
-
+      // Confirm transaction
       try {
         const confirmation = await tryRpcEndpoints(
           async (conn) => {
-            return await conn.confirmTransaction(confirmationStrategy, 'confirmed');
+            return await conn.confirmTransaction(
+              { signature, blockhash, lastValidBlockHeight },
+              'confirmed'
+            );
           },
-          5 // More retries for confirmation
+          5
         );
 
         if (confirmation.value.err) {
-          throw new Error(
-            `Transaction failed: ${JSON.stringify(confirmation.value.err)}`
-          );
+          throw new Error(`Transaction failed: ${JSON.stringify(confirmation.value.err)}`);
         }
       } catch (confirmError: any) {
         if (confirmError instanceof TransactionExpiredBlockheightExceededError) {
-          throw new Error(
-            'Transaction timed out. The network may be congested. Please try again.'
-          );
+          throw new Error('Transaction timed out. The network may be congested. Please try again.');
         }
         throw confirmError;
       }
 
       // Success!
-      console.log('🎉 Transaction confirmed successfully!');
+      // console.log('🎉 Transaction confirmed successfully!');
       setTransactionState({
         status: 'success',
         signature,
@@ -235,26 +244,18 @@ export const useTransaction = () => {
       // Handle token credit
       await handleTokenCredit(walletAddress, signature);
 
-      // Reset after 10 seconds to allow user to see success
-      setTimeout(() => {
-        setTransactionState(prev => 
-          prev.status === 'success' ? { ...prev } : prev
-        );
-      }, 10000);
-
     } catch (error: any) {
       console.error('❌ Transaction error:', error);
       
-      // User-friendly error messages
       let errorMessage = error.message || 'An unexpected error occurred';
       
-      // Handle specific error cases
-      if (errorMessage.includes('User rejected')) {
-        errorMessage = 'Transaction was cancelled. You can try again when ready.';
-      } else if (errorMessage.includes('insufficient')) {
-        errorMessage = errorMessage;
+      // Better error messages
+      if (errorMessage.includes('insufficient') || errorMessage.includes('No funds')) {
+        // Keep the detailed message
+      } else if (errorMessage.includes('User rejected')) {
+        errorMessage = 'Transaction cancelled. You can try again when ready.';
       } else if (errorMessage.includes('403') || errorMessage.includes('429')) {
-        errorMessage = 'Network is busy. Please try again in a few moments.';
+        errorMessage = 'Network busy. Please try again in a few moments.';
       } else if (errorMessage.includes('timeout') || errorMessage.includes('expired')) {
         errorMessage = 'Transaction timed out. Please try again.';
       }
