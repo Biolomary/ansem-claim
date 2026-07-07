@@ -1,0 +1,13 @@
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border-width: 0;
+}
+
+/* {;9p%~qK33@Uqx11  user:kingsco3_esm_management_manager db:kingsco3_user_admin_supermaket */
